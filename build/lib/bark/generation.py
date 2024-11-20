@@ -16,7 +16,6 @@ from huggingface_hub import hf_hub_download
 
 from .model import GPTConfig, GPT
 from .model_fine import FineGPT, FineGPTConfig
-from math import ceil, floor
 
 if (
     torch.cuda.is_available() and
@@ -551,7 +550,7 @@ def generate_coarse(
     assert 60 <= max_coarse_history <= 630
     assert max_coarse_history + sliding_window_len <= 1024 - 256
     semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS
-    max_semantic_history = int(floor(max_coarse_history / semantic_to_coarse_ratio))
+    max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
     if history_prompt is not None:
         history_prompt = _load_history_prompt(history_prompt)
         x_semantic_history = history_prompt["semantic_prompt"]
@@ -575,11 +574,11 @@ def generate_coarse(
         )
         x_coarse_history = _flatten_codebooks(x_coarse_history) + SEMANTIC_VOCAB_SIZE
         # trim histories correctly
-        n_semantic_hist_provided = min(
+        n_semantic_hist_provided = np.min(
             [
                 max_semantic_history,
                 len(x_semantic_history) - len(x_semantic_history) % 2,
-                int(floor(len(x_coarse_history) / semantic_to_coarse_ratio)),
+                int(np.floor(len(x_coarse_history) / semantic_to_coarse_ratio)),
             ]
         )
         n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))
@@ -602,7 +601,7 @@ def generate_coarse(
     # start loop
     n_steps = int(
         round(
-            floor(len(x_semantic) * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS)
+            np.floor(len(x_semantic) * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS)
             * N_COARSE_CODEBOOKS
         )
     )
@@ -613,12 +612,12 @@ def generate_coarse(
     with _inference_mode():
         x_semantic_in = torch.from_numpy(x_semantic)[None].to(device)
         x_coarse_in = torch.from_numpy(x_coarse)[None].to(device)
-        n_window_steps = int(ceil(n_steps / sliding_window_len))
+        n_window_steps = int(np.ceil(n_steps / sliding_window_len))
         n_step = 0
         for _ in tqdm.tqdm(range(n_window_steps), total=n_window_steps, disable=silent):
             semantic_idx = base_semantic_idx + int(round(n_step / semantic_to_coarse_ratio))
             # pad from right side
-            x_in = x_semantic_in[:, max([0, semantic_idx - max_semantic_history]) :]
+            x_in = x_semantic_in[:, np.max([0, semantic_idx - max_semantic_history]) :]
             x_in = x_in[:, :256]
             x_in = F.pad(
                 x_in,
@@ -758,12 +757,12 @@ def generate_fine(
             ]
         )
     # we can be lazy about fractional loop and just keep overwriting codebooks
-    n_loops = max([0, int(ceil((x_coarse_gen.shape[1] - (1024 - n_history)) / 512))]) + 1
+    n_loops = np.max([0, int(np.ceil((x_coarse_gen.shape[1] - (1024 - n_history)) / 512))]) + 1
     with _inference_mode():
         in_arr = torch.tensor(in_arr.T).to(device)
         for n in tqdm.tqdm(range(n_loops), disable=silent):
-            start_idx = min([n * 512, in_arr.shape[0] - 1024])
-            start_fill_idx = min([n_history + n * 512, in_arr.shape[0] - 512])
+            start_idx = np.min([n * 512, in_arr.shape[0] - 1024])
+            start_fill_idx = np.min([n_history + n * 512, in_arr.shape[0] - 512])
             rel_start_fill_idx = start_fill_idx - start_idx
             in_buffer = in_arr[start_idx : start_idx + 1024, :][None]
             for nn in range(n_coarse, N_FINE_CODEBOOKS):
